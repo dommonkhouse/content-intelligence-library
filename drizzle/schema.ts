@@ -1,17 +1,15 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import {
+  int,
+  mysqlEnum,
+  mysqlTable,
+  text,
+  timestamp,
+  varchar,
+  boolean,
+} from "drizzle-orm/mysql-core";
 
-/**
- * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
- */
 export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
   id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
@@ -25,4 +23,65 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+// ─── Content Articles ────────────────────────────────────────────────────────
+
+export const articles = mysqlTable("articles", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 512 }).notNull(),
+  url: varchar("url", { length: 2048 }),
+  source: varchar("source", { length: 256 }),
+  author: varchar("author", { length: 256 }),
+  fullText: text("fullText"),
+  summary: text("summary"),
+  keyInsights: text("keyInsights"), // JSON array of strings
+  publicationDate: timestamp("publicationDate"),
+  importedAt: timestamp("importedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  isFavourite: boolean("isFavourite").default(false).notNull(),
+  wordCount: int("wordCount").default(0),
+});
+
+export type Article = typeof articles.$inferSelect;
+export type InsertArticle = typeof articles.$inferInsert;
+
+// ─── Tags ────────────────────────────────────────────────────────────────────
+
+export const tags = mysqlTable("tags", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull().unique(),
+  colour: varchar("colour", { length: 32 }).default("#6366f1").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Tag = typeof tags.$inferSelect;
+export type InsertTag = typeof tags.$inferInsert;
+
+// ─── Article ↔ Tag join ──────────────────────────────────────────────────────
+
+export const articleTags = mysqlTable("article_tags", {
+  id: int("id").autoincrement().primaryKey(),
+  articleId: int("articleId").notNull(),
+  tagId: int("tagId").notNull(),
+});
+
+export type ArticleTag = typeof articleTags.$inferSelect;
+
+// ─── Generated Content Drafts ────────────────────────────────────────────────
+
+export const generatedDrafts = mysqlTable("generated_drafts", {
+  id: int("id").autoincrement().primaryKey(),
+  articleId: int("articleId").notNull(),
+  format: mysqlEnum("format", [
+    "video_script",
+    "linkedin_post",
+    "instagram_caption",
+    "blog_outline",
+  ]).notNull(),
+  title: varchar("title", { length: 512 }),
+  content: text("content").notNull(),
+  angle: varchar("angle", { length: 512 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type GeneratedDraft = typeof generatedDrafts.$inferSelect;
+export type InsertGeneratedDraft = typeof generatedDrafts.$inferInsert;
