@@ -22,3 +22,8 @@
 
 ## Tests
 - [x] Vitest tests for article CRUD procedures (7 tests passing)
+
+## Auth Removal
+- [x] Remove auth gate from DashboardLayout (no sign-in required)
+- [x] Remove global auth redirect from main.tsx
+- [x] All routes now open without login
