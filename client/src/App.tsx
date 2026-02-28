@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Library from "./pages/Library";
 import ArticleDetail from "./pages/ArticleDetail";
 import IdeaGenerator from "./pages/IdeaGenerator";
+import ContentCalendar from "./pages/ContentCalendar";
 import DashboardLayout from "./components/DashboardLayout";
 
 function Router() {
@@ -17,6 +18,7 @@ function Router() {
         <Route path={"/library"} component={Library} />
         <Route path={"/article/:id"} component={ArticleDetail} />
         <Route path={"/ideas"} component={IdeaGenerator} />
+        <Route path={"/calendar"} component={ContentCalendar} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>
@@ -27,7 +29,7 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="dark">
+      <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
           <Router />

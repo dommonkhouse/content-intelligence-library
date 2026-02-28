@@ -27,3 +27,10 @@
 - [x] Remove auth gate from DashboardLayout (no sign-in required)
 - [x] Remove global auth redirect from main.tsx
 - [x] All routes now open without login
+
+## Content Calendar
+- [x] Add content_repurposing table to track status per article per format
+- [x] Build ContentCalendar page with board view (Untouched / In Progress / Done)
+- [x] Track status per format: Video Script, LinkedIn, Instagram, Blog Post
+- [x] Add route and sidebar nav link for Content Calendar
+- [x] Push to GitHub after completion

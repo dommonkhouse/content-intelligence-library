@@ -14,6 +14,8 @@ import {
   toggleFavourite,
   updateArticle,
   upsertTag,
+  getCalendarData,
+  upsertRepurposingStatus,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -389,6 +391,23 @@ Return a JSON object with:
     .mutation(({ input }) => deleteDraft(input.id)),
 });
 
+// ─── Calendar Router ─────────────────────────────────────────────────────────
+
+const calendarRouter = router({
+  getData: publicProcedure.query(() => getCalendarData()),
+
+  updateStatus: publicProcedure
+    .input(
+      z.object({
+        articleId: z.number(),
+        format: z.enum(["video_script", "linkedin_post", "instagram_caption", "blog_post"]),
+        status: z.enum(["untouched", "in_progress", "done"]),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => upsertRepurposingStatus(input)),
+});
+
 // ─── App Router ───────────────────────────────────────────────────────────────
 
 export const appRouter = router({
@@ -404,6 +423,7 @@ export const appRouter = router({
   tags: tagsRouter,
   articles: articlesRouter,
   drafts: draftsRouter,
+  calendar: calendarRouter,
 });
 
 export type AppRouter = typeof appRouter;

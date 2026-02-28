@@ -9,6 +9,7 @@ import {
   Tag,
   articleTags,
   articles,
+  contentRepurposing,
   generatedDrafts,
   tags,
   users,
@@ -274,4 +275,79 @@ export async function deleteDraft(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db.delete(generatedDrafts).where(eq(generatedDrafts.id, id));
+}
+
+// ─── Content Calendar / Repurposing Status ──────────────────────────────────────────────
+
+export type CalendarFormat = "video_script" | "linkedin_post" | "instagram_caption" | "blog_post";
+export type CalendarStatus = "untouched" | "in_progress" | "done";
+
+export type CalendarArticle = {
+  id: number;
+  title: string;
+  source: string | null;
+  importedAt: Date;
+  statuses: Record<CalendarFormat, CalendarStatus>;
+  draftCounts: Record<CalendarFormat, number>;
+};
+
+const FORMATS: CalendarFormat[] = ["video_script", "linkedin_post", "instagram_caption", "blog_post"];
+
+export async function getCalendarData(): Promise<CalendarArticle[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  // Get all articles (id, title, source, importedAt)
+  const allArticles = await db
+    .select({ id: articles.id, title: articles.title, source: articles.source, importedAt: articles.importedAt })
+    .from(articles)
+    .orderBy(desc(articles.importedAt));
+
+  // Get all repurposing statuses
+  const statuses = await db.select().from(contentRepurposing);
+
+  // Get draft counts per article per format
+  const drafts = await db
+    .select({ articleId: generatedDrafts.articleId, format: generatedDrafts.format })
+    .from(generatedDrafts);
+
+  // Build lookup maps
+  const statusMap = new Map<string, CalendarStatus>();
+  for (const s of statuses) {
+    statusMap.set(`${s.articleId}:${s.format}`, s.status);
+  }
+
+  const draftCountMap = new Map<string, number>();
+  for (const d of drafts) {
+    const key = `${d.articleId}:${d.format}`;
+    draftCountMap.set(key, (draftCountMap.get(key) ?? 0) + 1);
+  }
+
+  return allArticles.map((a) => {
+    const statObj = {} as Record<CalendarFormat, CalendarStatus>;
+    const countObj = {} as Record<CalendarFormat, number>;
+    for (const fmt of FORMATS) {
+      const key = `${a.id}:${fmt}`;
+      // If there are drafts and no explicit status, treat as in_progress
+      const draftCount = draftCountMap.get(key) ?? 0;
+      const explicitStatus = statusMap.get(key);
+      statObj[fmt] = explicitStatus ?? (draftCount > 0 ? "in_progress" : "untouched");
+      countObj[fmt] = draftCount;
+    }
+    return { ...a, statuses: statObj, draftCounts: countObj };
+  });
+}
+
+export async function upsertRepurposingStatus(data: {
+  articleId: number;
+  format: CalendarFormat;
+  status: CalendarStatus;
+  notes?: string;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(contentRepurposing)
+    .values({ articleId: data.articleId, format: data.format, status: data.status, notes: data.notes })
+    .onDuplicateKeyUpdate({ set: { status: data.status, notes: data.notes } });
 }

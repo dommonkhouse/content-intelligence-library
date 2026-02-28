@@ -85,3 +85,25 @@ export const generatedDrafts = mysqlTable("generated_drafts", {
 
 export type GeneratedDraft = typeof generatedDrafts.$inferSelect;
 export type InsertGeneratedDraft = typeof generatedDrafts.$inferInsert;
+
+// ─── Content Repurposing Status ─────────────────────────────────────────────
+
+export const contentRepurposing = mysqlTable("content_repurposing", {
+  id: int("id").autoincrement().primaryKey(),
+  articleId: int("articleId").notNull(),
+  format: mysqlEnum("format", [
+    "video_script",
+    "linkedin_post",
+    "instagram_caption",
+    "blog_post",
+  ]).notNull(),
+  status: mysqlEnum("status", ["untouched", "in_progress", "done"])
+    .default("untouched")
+    .notNull(),
+  notes: text("notes"),
+  draftId: int("draftId"), // optional link to generated_drafts
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ContentRepurposing = typeof contentRepurposing.$inferSelect;
+export type InsertContentRepurposing = typeof contentRepurposing.$inferInsert;
