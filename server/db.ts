@@ -12,10 +12,14 @@ import {
   contentRepurposing,
   generatedDrafts,
   rawEmails,
+  newsletterSources,
+  ingestLog,
   tags,
   users,
   type RawEmail,
   type InsertRawEmail,
+  type NewsletterSource,
+  type IngestLog,
 } from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -461,5 +465,62 @@ export async function getRawEmailById(id: number): Promise<RawEmail | null> {
   const db = await getDb();
   if (!db) return null;
   const rows = await db.select().from(rawEmails).where(eq(rawEmails.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getRawEmailByGmailId(gmailMessageId: string): Promise<RawEmail | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(rawEmails).where(eq(rawEmails.gmailMessageId, gmailMessageId)).limit(1);
+  return rows[0] ?? null;
+}
+
+// ─── Newsletter Sources ──────────────────────────────────────────────────────
+
+export async function listNewsletterSources(): Promise<NewsletterSource[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(newsletterSources).orderBy(newsletterSources.name);
+}
+
+export async function upsertNewsletterSource(data: {
+  name: string;
+  emailAddress: string;
+  isActive?: boolean;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(newsletterSources)
+    .values({ name: data.name, emailAddress: data.emailAddress.toLowerCase(), isActive: data.isActive ?? true })
+    .onDuplicateKeyUpdate({ set: { name: data.name, isActive: data.isActive ?? true } });
+}
+
+export async function toggleNewsletterSource(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const row = await db.select({ isActive: newsletterSources.isActive }).from(newsletterSources).where(eq(newsletterSources.id, id)).limit(1);
+  if (!row[0]) return;
+  await db.update(newsletterSources).set({ isActive: !row[0].isActive }).where(eq(newsletterSources.id, id));
+}
+
+export async function deleteNewsletterSource(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(newsletterSources).where(eq(newsletterSources.id, id));
+}
+
+// ─── Ingest Log ──────────────────────────────────────────────────────────────
+
+export async function listIngestLogs(limit = 20): Promise<IngestLog[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(ingestLog).orderBy(desc(ingestLog.runAt)).limit(limit);
+}
+
+export async function getLastIngestRun(): Promise<IngestLog | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(ingestLog).orderBy(desc(ingestLog.runAt)).limit(1);
   return rows[0] ?? null;
 }

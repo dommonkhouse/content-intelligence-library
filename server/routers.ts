@@ -20,7 +20,14 @@ import {
   listRawEmails,
   updateRawEmailStatus,
   getRawEmailById,
+  listNewsletterSources,
+  upsertNewsletterSource,
+  toggleNewsletterSource,
+  deleteNewsletterSource,
+  listIngestLogs,
+  getLastIngestRun,
 } from "./db";
+import { runGmailIngest } from "./gmailIngest";
 import { invokeLLM } from "./_core/llm";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -552,6 +559,48 @@ Return a JSON object with:
     }),
 });
 
+// ─── Ingest Settings Router ──────────────────────────────────────────────────
+
+const ingestRouter = router({
+  // Newsletter sources management
+  listSources: publicProcedure.query(() => listNewsletterSources()),
+
+  addSource: publicProcedure
+    .input(z.object({ name: z.string().min(1).max(256), emailAddress: z.string().email() }))
+    .mutation(({ input }) => upsertNewsletterSource(input)),
+
+  toggleSource: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => toggleNewsletterSource(input.id)),
+
+  deleteSource: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => deleteNewsletterSource(input.id)),
+
+  // Ingest log
+  listLogs: publicProcedure
+    .input(z.object({ limit: z.number().min(1).max(100).default(20) }))
+    .query(({ input }) => listIngestLogs(input.limit)),
+
+  getLastRun: publicProcedure.query(() => getLastIngestRun()),
+
+  // Manual trigger: run Gmail ingest now
+  runNow: publicProcedure
+    .input(
+      z.object({
+        maxPerSource: z.number().min(1).max(200).default(50),
+        afterDate: z.date().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const result = await runGmailIngest({
+        maxPerSource: input.maxPerSource,
+        afterDate: input.afterDate,
+      });
+      return result;
+    }),
+});
+
 // ─── App Router ───────────────────────────────────────────────────────────────
 
 export const appRouter = router({
@@ -569,6 +618,7 @@ export const appRouter = router({
   drafts: draftsRouter,
   calendar: calendarRouter,
   inbox: inboxRouter,
+  ingest: ingestRouter,
 });
 
 export type AppRouter = typeof appRouter;

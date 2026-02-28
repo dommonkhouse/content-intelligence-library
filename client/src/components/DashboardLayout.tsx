@@ -12,7 +12,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { BookOpen, CalendarDays, Lightbulb, Mail, PanelLeft } from "lucide-react";
+import { BookOpen, CalendarDays, Lightbulb, Mail, PanelLeft, Settings2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 
@@ -21,6 +21,7 @@ const menuItems = [
   { icon: Lightbulb, label: "Idea Generator", path: "/ideas" },
   { icon: CalendarDays, label: "Content Calendar", path: "/calendar" },
   { icon: Mail, label: "Email Inbox", path: "/inbox" },
+  { icon: Settings2, label: "Ingest Settings", path: "/ingest" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

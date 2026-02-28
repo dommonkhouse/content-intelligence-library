@@ -1,0 +1,9 @@
+{
+  "query": "\nINSERT INTO `newsletter_sources` (`name`, `emailAddress`, `isActive`) VALUES\n  ('Alan Whitman', 'alan@alandwhitman.com', true),\n  ('Eric Partaker', 'eric@ericpartaker.com', true),\n  ('Not Another CEO', 'notanotherceo+playbooks@substack.com', true),\n  ('OnlyCFO', 'onlycfo@substack.com', true),\n  ('Ryan Deiss / The Scalable Company', 'ryandeiss@scalable.co', true),\n  ('Scot Chisholm (Scot''s Newsletter)', 'scot@neversaydie.co', true)\nON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `isActive` = VALUES(`isActive`);\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user HWm2JAKmok4mrXi.6554009050df --database 6grFWr4cgf8qDBQPqVY57T --execute \nINSERT INTO `newsletter_sources` (`name`, `emailAddress`, `isActive`) VALUES\n  ('Alan Whitman', 'alan@alandwhitman.com', true),\n  ('Eric Partaker', 'eric@ericpartaker.com', true),\n  ('Not Another CEO', 'notanotherceo+playbooks@substack.com', true),\n  ('OnlyCFO', 'onlycfo@substack.com', true),\n  ('Ryan Deiss / The Scalable Company', 'ryandeiss@scalable.co', true),\n  ('Scot Chisholm (Scot''s Newsletter)', 'scot@neversaydie.co', true)\nON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `isActive` = VALUES(`isActive`);\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 70
+}

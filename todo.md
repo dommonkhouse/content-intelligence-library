@@ -50,3 +50,12 @@
 - [ ] Show clickable links in raw email view (for Gmail verification URL)
 - [ ] Add Inbox nav item to sidebar
 - [ ] Set up Alan Gmail filter to forward to monkhouse-newsletter@manus.bot
+
+## Gmail Ingest Automation
+- [x] Add newsletter_sources and ingest_log tables to DB schema
+- [x] Seed 6 newsletter sources (Alan Whitman, Eric Partaker, Not Another CEO, OnlyCFO, Ryan Deiss, Scot Chisholm)
+- [x] Build server/gmailIngest.ts: Gmail MCP search + dedup by gmailMessageId + insert to raw_emails
+- [x] Add ingest tRPC router: listSources, addSource, toggleSource, deleteSource, listLogs, getLastRun, runNow
+- [x] Build Ingest Settings page: status cards, sources table, ingest history log, manual trigger
+- [x] Add Ingest Settings nav item to sidebar
+- [x] Bulk-ingest 180 historical newsletter emails from Gmail (194 found, 14 excluded as non-newsletter)

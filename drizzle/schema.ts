@@ -130,6 +130,8 @@ export const rawEmails = mysqlTable("raw_emails", {
   fromName: varchar("fromName", { length: 256 }),
   rawText: text("rawText"),
   rawHtml: text("rawHtml"),
+  gmailMessageId: varchar("gmailMessageId", { length: 128 }), // Gmail message ID for dedup
+  gmailThreadId: varchar("gmailThreadId", { length: 128 }),
   status: mysqlEnum("status", ["pending", "approved", "discarded", "error"])
     .default("pending")
     .notNull(),
@@ -141,3 +143,36 @@ export const rawEmails = mysqlTable("raw_emails", {
 
 export type RawEmail = typeof rawEmails.$inferSelect;
 export type InsertRawEmail = typeof rawEmails.$inferInsert;
+
+// ─── Newsletter Sources ───────────────────────────────────────────────────────
+// Tracks which email senders to monitor for newsletter ingestion
+
+export const newsletterSources = mysqlTable("newsletter_sources", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 256 }).notNull(),
+  emailAddress: varchar("emailAddress", { length: 320 }).notNull().unique(),
+  isActive: boolean("isActive").default(true).notNull(),
+  lastIngestedAt: timestamp("lastIngestedAt"),
+  totalIngested: int("totalIngested").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type NewsletterSource = typeof newsletterSources.$inferSelect;
+export type InsertNewsletterSource = typeof newsletterSources.$inferInsert;
+
+// ─── Ingest Log ───────────────────────────────────────────────────────────────
+// Records each scheduled ingest run
+
+export const ingestLog = mysqlTable("ingest_log", {
+  id: int("id").autoincrement().primaryKey(),
+  runAt: timestamp("runAt").defaultNow().notNull(),
+  status: mysqlEnum("status", ["success", "partial", "error"]).notNull(),
+  emailsFound: int("emailsFound").default(0).notNull(),
+  emailsNew: int("emailsNew").default(0).notNull(),
+  emailsSkipped: int("emailsSkipped").default(0).notNull(),
+  errorMessage: text("errorMessage"),
+  durationMs: int("durationMs"),
+});
+
+export type IngestLog = typeof ingestLog.$inferSelect;
+export type InsertIngestLog = typeof ingestLog.$inferInsert;
