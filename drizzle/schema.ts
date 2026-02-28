@@ -1,5 +1,6 @@
 import {
   int,
+  unique,
   mysqlEnum,
   mysqlTable,
   text,
@@ -75,7 +76,7 @@ export const generatedDrafts = mysqlTable("generated_drafts", {
     "video_script",
     "linkedin_post",
     "instagram_caption",
-    "blog_outline",
+    "blog_post",
   ]).notNull(),
   title: varchar("title", { length: 512 }),
   content: text("content").notNull(),
@@ -88,22 +89,31 @@ export type InsertGeneratedDraft = typeof generatedDrafts.$inferInsert;
 
 // ─── Content Repurposing Status ─────────────────────────────────────────────
 
-export const contentRepurposing = mysqlTable("content_repurposing", {
-  id: int("id").autoincrement().primaryKey(),
-  articleId: int("articleId").notNull(),
-  format: mysqlEnum("format", [
-    "video_script",
-    "linkedin_post",
-    "instagram_caption",
-    "blog_post",
-  ]).notNull(),
-  status: mysqlEnum("status", ["untouched", "in_progress", "done"])
-    .default("untouched")
-    .notNull(),
-  notes: text("notes"),
-  draftId: int("draftId"), // optional link to generated_drafts
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const contentRepurposing = mysqlTable(
+  "content_repurposing",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    articleId: int("articleId").notNull(),
+    format: mysqlEnum("format", [
+      "video_script",
+      "linkedin_post",
+      "instagram_caption",
+      "blog_post",
+    ]).notNull(),
+    status: mysqlEnum("status", ["untouched", "in_progress", "done"])
+      .default("untouched")
+      .notNull(),
+    notes: text("notes"),
+    draftId: int("draftId"), // optional link to generated_drafts
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    articleFormatUnique: unique("content_repurposing_article_format_unique").on(
+      table.articleId,
+      table.format
+    ),
+  })
+);
 
 export type ContentRepurposing = typeof contentRepurposing.$inferSelect;
 export type InsertContentRepurposing = typeof contentRepurposing.$inferInsert;

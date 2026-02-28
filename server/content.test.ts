@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { UNAUTHED_ERR_MSG } from "../shared/const";
 
 function createCtx(): TrpcContext {
   return {
@@ -66,5 +67,18 @@ describe("auth router", () => {
     const caller = appRouter.createCaller(createCtx());
     const result = await caller.auth.me();
     expect(result).toBeNull();
+  });
+});
+
+describe("calendar router", () => {
+  it("rejects unauthenticated status updates", async () => {
+    const caller = appRouter.createCaller(createCtx());
+    await expect(
+      caller.calendar.updateStatus({
+        articleId: 1,
+        format: "video_script",
+        status: "in_progress",
+      })
+    ).rejects.toThrow(UNAUTHED_ERR_MSG);
   });
 });

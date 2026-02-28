@@ -27,11 +27,11 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 const tagsRouter = router({
   list: publicProcedure.query(() => getAllTags()),
 
-  upsert: publicProcedure
+  upsert: protectedProcedure
     .input(z.object({ name: z.string().min(1).max(128), colour: z.string().optional() }))
     .mutation(({ input }) => upsertTag(input.name, input.colour)),
 
-  delete: publicProcedure
+  delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(({ input }) => deleteTag(input.id)),
 });
@@ -62,7 +62,7 @@ const articlesRouter = router({
       return article;
     }),
 
-  create: publicProcedure
+  create: protectedProcedure
     .input(
       z.object({
         title: z.string().min(1).max(512),
@@ -82,7 +82,7 @@ const articlesRouter = router({
       return createArticle({ ...data, wordCount }, tagIds);
     }),
 
-  update: publicProcedure
+  update: protectedProcedure
     .input(
       z.object({
         id: z.number(),
@@ -105,16 +105,16 @@ const articlesRouter = router({
       return updateArticle(id, data, tagIds);
     }),
 
-  delete: publicProcedure
+  delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(({ input }) => deleteArticle(input.id)),
 
-  toggleFavourite: publicProcedure
+  toggleFavourite: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(({ input }) => toggleFavourite(input.id)),
 
   // ── URL Import ──────────────────────────────────────────────────────────────
-  importFromUrl: publicProcedure
+  importFromUrl: protectedProcedure
     .input(z.object({ url: z.string().url(), tagIds: z.array(z.number()).default([]) }))
     .mutation(async ({ input }) => {
       // Use LLM to extract article metadata from the URL content
@@ -195,7 +195,7 @@ Return ONLY valid JSON, no markdown fences.`;
     }),
 
   // ── Bulk import from pasted text (email/newsletter) ─────────────────────────
-  importFromText: publicProcedure
+  importFromText: protectedProcedure
     .input(
       z.object({
         rawText: z.string().min(10),
@@ -309,11 +309,11 @@ const draftsRouter = router({
     .input(z.object({ articleId: z.number() }))
     .query(({ input }) => getDraftsByArticle(input.articleId)),
 
-  generate: publicProcedure
+  generate: protectedProcedure
     .input(
       z.object({
         articleId: z.number(),
-        format: z.enum(["video_script", "linkedin_post", "instagram_caption", "blog_outline"]),
+        format: z.enum(["video_script", "linkedin_post", "instagram_caption", "blog_post"]),
         customAngle: z.string().optional(),
       })
     )
@@ -325,7 +325,7 @@ const draftsRouter = router({
         video_script: `Write a compelling YouTube video script (800-1200 words) for a founder CEO audience. Structure: hook (30s), problem setup, main insights with examples, actionable takeaways, strong CTA. Use conversational, direct language. Include [PAUSE] markers and B-ROLL suggestions in brackets.`,
         linkedin_post: `Write a high-performing LinkedIn post (200-350 words). Start with a bold, scroll-stopping first line. Share a contrarian or surprising insight from the article. Use short paragraphs (1-2 sentences). End with a thought-provoking question to drive comments. No hashtag spam — max 3 relevant hashtags.`,
         instagram_caption: `Write an Instagram caption (150-250 words). Open with a punchy hook. Share one powerful insight in plain language. Use line breaks for readability. End with a call to action. Include 5-8 relevant hashtags on a new line.`,
-        blog_outline: `Create a detailed blog post outline (600-900 words of outline content). Include: SEO-optimised H1 title, meta description (155 chars), introduction hook, 4-6 H2 sections each with 3-4 bullet points of content to cover, conclusion with CTA. Also suggest 3 internal linking opportunities and 2 external authority sources to cite.`,
+        blog_post: `Create a detailed blog post outline (600-900 words of outline content). Include: SEO-optimised H1 title, meta description (155 chars), introduction hook, 4-6 H2 sections each with 3-4 bullet points of content to cover, conclusion with CTA. Also suggest 3 internal linking opportunities and 2 external authority sources to cite.`,
       };
 
       const insights = (() => {
@@ -386,7 +386,7 @@ Return a JSON object with:
       });
     }),
 
-  delete: publicProcedure
+  delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(({ input }) => deleteDraft(input.id)),
 });
@@ -396,7 +396,7 @@ Return a JSON object with:
 const calendarRouter = router({
   getData: publicProcedure.query(() => getCalendarData()),
 
-  updateStatus: publicProcedure
+  updateStatus: protectedProcedure
     .input(
       z.object({
         articleId: z.number(),
@@ -414,7 +414,7 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
+    logout: protectedProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;

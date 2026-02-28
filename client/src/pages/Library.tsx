@@ -39,7 +39,7 @@ const FORMAT_LABELS: Record<string, string> = {
   video_script: "Video",
   linkedin_post: "LinkedIn",
   instagram_caption: "Instagram",
-  blog_outline: "Blog",
+  blog_post: "Blog",
 };
 
 const TAG_COLOURS = [

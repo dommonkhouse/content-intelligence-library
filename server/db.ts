@@ -191,11 +191,15 @@ export async function createArticle(
 ): Promise<ArticleWithTags> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.insert(articles).values(data);
+  const inserted = await db.insert(articles).values(data);
+  const insertId = Number((inserted as any)?.[0]?.insertId ?? (inserted as any)?.insertId);
+  if (!Number.isFinite(insertId) || insertId <= 0) {
+    throw new Error("Failed to create article: missing insertId");
+  }
   const created = await db
     .select()
     .from(articles)
-    .orderBy(desc(articles.id))
+    .where(eq(articles.id, insertId))
     .limit(1);
   const article = created[0]!;
   if (tagIds.length) {
@@ -255,18 +259,22 @@ export async function getDraftsByArticle(articleId: number) {
 
 export async function saveDraft(data: {
   articleId: number;
-  format: "video_script" | "linkedin_post" | "instagram_caption" | "blog_outline";
+  format: "video_script" | "linkedin_post" | "instagram_caption" | "blog_post";
   title: string;
   content: string;
   angle: string;
 }) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.insert(generatedDrafts).values(data);
+  const inserted = await db.insert(generatedDrafts).values(data);
+  const insertId = Number((inserted as any)?.[0]?.insertId ?? (inserted as any)?.insertId);
+  if (!Number.isFinite(insertId) || insertId <= 0) {
+    throw new Error("Failed to save draft: missing insertId");
+  }
   const saved = await db
     .select()
     .from(generatedDrafts)
-    .orderBy(desc(generatedDrafts.id))
+    .where(eq(generatedDrafts.id, insertId))
     .limit(1);
   return saved[0]!;
 }
@@ -293,6 +301,62 @@ export type CalendarArticle = {
 
 const FORMATS: CalendarFormat[] = ["video_script", "linkedin_post", "instagram_caption", "blog_post"];
 
+type CalendarArticleRow = Pick<CalendarArticle, "id" | "title" | "source" | "importedAt">;
+type CalendarStatusRow = {
+  articleId: number;
+  format: CalendarFormat;
+  status: CalendarStatus;
+  updatedAt?: Date;
+};
+type CalendarDraftRow = {
+  articleId: number;
+  format: "video_script" | "linkedin_post" | "instagram_caption" | "blog_post" | "blog_outline";
+};
+
+function normalizeFormat(
+  format: CalendarDraftRow["format"] | CalendarStatusRow["format"]
+): CalendarFormat {
+  return format === "blog_outline" ? "blog_post" : format;
+}
+
+export function deriveCalendarData(
+  allArticles: CalendarArticleRow[],
+  statuses: CalendarStatusRow[],
+  drafts: CalendarDraftRow[]
+): CalendarArticle[] {
+  const statusMap = new Map<string, CalendarStatus>();
+  const sortedStatuses = [...statuses].sort((a, b) => {
+    const aTs = a.updatedAt?.getTime() ?? 0;
+    const bTs = b.updatedAt?.getTime() ?? 0;
+    return bTs - aTs;
+  });
+  for (const s of sortedStatuses) {
+    const key = `${s.articleId}:${normalizeFormat(s.format)}`;
+    if (!statusMap.has(key)) {
+      statusMap.set(key, s.status);
+    }
+  }
+
+  const draftCountMap = new Map<string, number>();
+  for (const d of drafts) {
+    const key = `${d.articleId}:${normalizeFormat(d.format)}`;
+    draftCountMap.set(key, (draftCountMap.get(key) ?? 0) + 1);
+  }
+
+  return allArticles.map((a) => {
+    const statObj = {} as Record<CalendarFormat, CalendarStatus>;
+    const countObj = {} as Record<CalendarFormat, number>;
+    for (const fmt of FORMATS) {
+      const key = `${a.id}:${fmt}`;
+      const draftCount = draftCountMap.get(key) ?? 0;
+      const explicitStatus = statusMap.get(key);
+      statObj[fmt] = explicitStatus ?? (draftCount > 0 ? "in_progress" : "untouched");
+      countObj[fmt] = draftCount;
+    }
+    return { ...a, statuses: statObj, draftCounts: countObj };
+  });
+}
+
 export async function getCalendarData(): Promise<CalendarArticle[]> {
   const db = await getDb();
   if (!db) return [];
@@ -304,38 +368,21 @@ export async function getCalendarData(): Promise<CalendarArticle[]> {
     .orderBy(desc(articles.importedAt));
 
   // Get all repurposing statuses
-  const statuses = await db.select().from(contentRepurposing);
+  const statuses = await db
+    .select({
+      articleId: contentRepurposing.articleId,
+      format: contentRepurposing.format,
+      status: contentRepurposing.status,
+      updatedAt: contentRepurposing.updatedAt,
+    })
+    .from(contentRepurposing);
 
   // Get draft counts per article per format
   const drafts = await db
     .select({ articleId: generatedDrafts.articleId, format: generatedDrafts.format })
     .from(generatedDrafts);
 
-  // Build lookup maps
-  const statusMap = new Map<string, CalendarStatus>();
-  for (const s of statuses) {
-    statusMap.set(`${s.articleId}:${s.format}`, s.status);
-  }
-
-  const draftCountMap = new Map<string, number>();
-  for (const d of drafts) {
-    const key = `${d.articleId}:${d.format}`;
-    draftCountMap.set(key, (draftCountMap.get(key) ?? 0) + 1);
-  }
-
-  return allArticles.map((a) => {
-    const statObj = {} as Record<CalendarFormat, CalendarStatus>;
-    const countObj = {} as Record<CalendarFormat, number>;
-    for (const fmt of FORMATS) {
-      const key = `${a.id}:${fmt}`;
-      // If there are drafts and no explicit status, treat as in_progress
-      const draftCount = draftCountMap.get(key) ?? 0;
-      const explicitStatus = statusMap.get(key);
-      statObj[fmt] = explicitStatus ?? (draftCount > 0 ? "in_progress" : "untouched");
-      countObj[fmt] = draftCount;
-    }
-    return { ...a, statuses: statObj, draftCounts: countObj };
-  });
+  return deriveCalendarData(allArticles, statuses, drafts as CalendarDraftRow[]);
 }
 
 export async function upsertRepurposingStatus(data: {

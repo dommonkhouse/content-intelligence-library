@@ -21,7 +21,7 @@ import {
 import { Streamdown } from "streamdown";
 import type { Tag } from "../../../drizzle/schema";
 
-type Format = "video_script" | "linkedin_post" | "instagram_caption" | "blog_outline";
+type Format = "video_script" | "linkedin_post" | "instagram_caption" | "blog_post";
 
 const FORMATS: { id: Format; label: string; icon: React.ElementType; description: string; colour: string }[] = [
   {
@@ -46,7 +46,7 @@ const FORMATS: { id: Format; label: string; icon: React.ElementType; description
     colour: "#ec4899",
   },
   {
-    id: "blog_outline",
+    id: "blog_post",
     label: "Blog Outline",
     icon: FileText,
     description: "SEO-optimised outline with H2s & CTAs",
@@ -133,14 +133,14 @@ export default function IdeaGenerator() {
     video_script: Video,
     linkedin_post: Linkedin,
     instagram_caption: Instagram,
-    blog_outline: FileText,
+    blog_post: FileText,
   };
 
   const FORMAT_COLOUR_MAP: Record<Format, string> = {
     video_script: "#f97316",
     linkedin_post: "#0ea5e9",
     instagram_caption: "#ec4899",
-    blog_outline: "#10b981",
+    blog_post: "#10b981",
   };
 
   return (
