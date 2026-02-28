@@ -68,3 +68,19 @@
 - [x] Create "ingest-queue" label in Gmail
 - [x] Update gmailIngest.ts to also search label:ingest-queue (in addition to sender-based search)
 - [ ] Remove the ingest-queue label from emails after successful processing (prevent re-ingestion) — NOTE: Gmail MCP has no label-removal tool; deduplication via gmailMessageId prevents re-ingestion instead
+
+## Focus Topics Feature (3-Cluster LinkedIn Strategy)
+- [x] Add focus_topics and article_focus_topics tables to DB schema
+- [x] Seed 3 focus topic clusters (Day 1: Hiring/Topgrading, Day 2: Founder CEO, Day 3: Self-Running Team)
+- [x] AI-tag all 486 articles against 3 focus topics - 439 pairs tagged, 27 skipped (rate limits)
+- [x] Build Focus Topics page with per-cluster article lists, relevance filter, and tagging progress
+- [x] Add Focus Topics nav item to sidebar (Target icon)
+- [ ] Build Day 1/2/3 rotation queue view: next 30 days of content mapped to clusters
+- [ ] Auto-tag new articles against focus topics during bulk process pipeline
+
+## GitHub Sync + Google OAuth + Auto-Processing
+- [x] Pull latest GitHub code and merge into project
+- [ ] Set up Google OAuth credentials (client ID + secret) for Gmail API label/delete management
+- [ ] Implement post-ingest label removal: strip ingest-queue label; delete email if it was the only label
+- [x] Auto-process pending emails without manual trigger (never ask Dom to process)
+- [x] Add all new newsletter senders as named sources (15 senders total now in Ingest Settings)

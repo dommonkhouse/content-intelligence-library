@@ -13,11 +13,11 @@ import {
   ingestLog,
   type InsertRawEmail,
 } from "../drizzle/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 
 const execFileAsync = promisify(execFile);
 
-// ─── Types from Gmail MCP ─────────────────────────────────────────────────────
+// --- Types from Gmail MCP -----------------------------------------------------
 
 interface GmailMessage {
   id: string;
@@ -35,7 +35,7 @@ interface GmailSearchResult {
   resultSizeEstimate?: number;
 }
 
-// ─── MCP Helper ───────────────────────────────────────────────────────────────
+// --- MCP Helper ---------------------------------------------------------------
 
 async function callGmailMcp(toolName: string, input: Record<string, unknown>): Promise<unknown> {
   const args = [
@@ -63,7 +63,7 @@ async function callGmailMcp(toolName: string, input: Record<string, unknown>): P
   return JSON.parse(jsonMatch[0]);
 }
 
-// ─── Email Parser ─────────────────────────────────────────────────────────────
+// --- Email Parser -------------------------------------------------------------
 
 function parseFromHeader(from: string): { name: string; address: string } {
   // Handles: "Name <email@example.com>" or "email@example.com"
@@ -74,7 +74,7 @@ function parseFromHeader(from: string): { name: string; address: string } {
   return { name: "", address: from.trim().toLowerCase() };
 }
 
-// ─── Check for existing Gmail message IDs ────────────────────────────────────
+// --- Check for existing Gmail message IDs ------------------------------------
 
 async function getExistingGmailIds(gmailIds: string[]): Promise<Set<string>> {
   if (!gmailIds.length) return new Set();
@@ -89,7 +89,7 @@ async function getExistingGmailIds(gmailIds: string[]): Promise<Set<string>> {
   return new Set(rows.map((r) => r.gmailMessageId).filter(Boolean) as string[]);
 }
 
-// ─── Main Ingest Function ─────────────────────────────────────────────────────
+// --- Main Ingest Function -----------------------------------------------------
 
 export interface IngestResult {
   emailsFound: number;
@@ -237,12 +237,18 @@ export async function runGmailIngest(opts?: {
           .update(newsletterSources)
           .set({
             lastIngestedAt: new Date(),
-            totalIngested: source.totalIngested + 1,
+            totalIngested: sql`${newsletterSources.totalIngested} + 1`,
           })
           .where(eq(newsletterSources.id, source.id));
       }
     } catch (err) {
-      result.errors.push(`Failed to insert message ${msg.id}: ${String(err)}`);
+      const message = String(err);
+      if (message.includes("Duplicate entry") || message.includes("ER_DUP_ENTRY")) {
+        // Another run inserted this message first — safe to skip.
+        result.emailsSkipped++;
+        continue;
+      }
+      result.errors.push(`Failed to insert message ${msg.id}: ${message}`);
     }
   }
 
@@ -252,7 +258,7 @@ export async function runGmailIngest(opts?: {
   return result;
 }
 
-// ─── Log Helper ───────────────────────────────────────────────────────────────
+// --- Log Helper ---------------------------------------------------------------
 
 async function logIngestRun(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,

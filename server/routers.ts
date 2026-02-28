@@ -28,6 +28,9 @@ import {
   getLastIngestRun,
 } from "./db";
 import { runGmailIngest } from "./gmailIngest";
+import { getDb } from "./db";
+import { focusTopics, articleFocusTopics, articles } from "../drizzle/schema";
+import { eq, desc, and, gte, sql, count } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -54,7 +57,7 @@ function enforceRateLimit(params: {
   rateLimitBuckets.set(params.key, recent);
 }
 
-// ─── Tags Router ──────────────────────────────────────────────────────────────
+// --- Tags Router --------------------------------------------------------------
 
 const tagsRouter = router({
   list: publicProcedure.query(() => getAllTags()),
@@ -68,7 +71,7 @@ const tagsRouter = router({
     .mutation(({ input }) => deleteTag(input.id)),
 });
 
-// ─── Articles Router ──────────────────────────────────────────────────────────
+// --- Articles Router ----------------------------------------------------------
 
 const articlesRouter = router({
   list: publicProcedure
@@ -145,7 +148,7 @@ const articlesRouter = router({
     .input(z.object({ id: z.number() }))
     .mutation(({ input }) => toggleFavourite(input.id)),
 
-  // ── URL Import ──────────────────────────────────────────────────────────────
+  // -- URL Import --------------------------------------------------------------
   importFromUrl: protectedProcedure
     .input(z.object({ url: z.string().url(), tagIds: z.array(z.number()).default([]) }))
     .mutation(async ({ input, ctx }) => {
@@ -232,7 +235,7 @@ Return ONLY valid JSON, no markdown fences.`;
       );
     }),
 
-  // ── Bulk import from pasted text (email/newsletter) ─────────────────────────
+  // -- Bulk import from pasted text (email/newsletter) -------------------------
   importFromText: protectedProcedure
     .input(
       z.object({
@@ -346,7 +349,7 @@ Return ONLY valid JSON.`;
     }),
 });
 
-// ─── Drafts Router ────────────────────────────────────────────────────────────
+// --- Drafts Router ------------------------------------------------------------
 
 const draftsRouter = router({
   listByArticle: publicProcedure
@@ -373,7 +376,7 @@ const draftsRouter = router({
 
       const formatInstructions: Record<string, string> = {
         video_script: `Write a compelling YouTube video script (800-1200 words) for a founder CEO audience. Structure: hook (30s), problem setup, main insights with examples, actionable takeaways, strong CTA. Use conversational, direct language. Include [PAUSE] markers and B-ROLL suggestions in brackets.`,
-        linkedin_post: `Write a high-performing LinkedIn post (200-350 words). Start with a bold, scroll-stopping first line. Share a contrarian or surprising insight from the article. Use short paragraphs (1-2 sentences). End with a thought-provoking question to drive comments. No hashtag spam — max 3 relevant hashtags.`,
+        linkedin_post: `Write a high-performing LinkedIn post (200-350 words). Start with a bold, scroll-stopping first line. Share a contrarian or surprising insight from the article. Use short paragraphs (1-2 sentences). End with a thought-provoking question to drive comments. No hashtag spam - max 3 relevant hashtags.`,
         instagram_caption: `Write an Instagram caption (150-250 words). Open with a punchy hook. Share one powerful insight in plain language. Use line breaks for readability. End with a call to action. Include 5-8 relevant hashtags on a new line.`,
         blog_post: `Create a detailed blog post outline (600-900 words of outline content). Include: SEO-optimised H1 title, meta description (155 chars), introduction hook, 4-6 H2 sections each with 3-4 bullet points of content to cover, conclusion with CTA. Also suggest 3 internal linking opportunities and 2 external authority sources to cite.`,
       };
@@ -441,7 +444,7 @@ Return a JSON object with:
     .mutation(({ input }) => deleteDraft(input.id)),
 });
 
-// ─── Calendar Router ─────────────────────────────────────────────────────────
+// --- Calendar Router ---------------------------------------------------------
 
 const calendarRouter = router({
   getData: publicProcedure
@@ -465,7 +468,7 @@ const calendarRouter = router({
     .mutation(({ input }) => upsertRepurposingStatus(input)),
 });
 
-// ─── Email Inbox Router ─────────────────────────────────────────────────────
+// --- Email Inbox Router -----------------------------------------------------
 
 const inboxRouter = router({
   list: publicProcedure
@@ -729,7 +732,7 @@ Return a JSON object with:
     }),
 });
 
-// ─── Ingest Settings Router ──────────────────────────────────────────────────
+// --- Ingest Settings Router --------------------------------------------------
 
 const ingestRouter = router({
   // Newsletter sources management
@@ -771,8 +774,72 @@ const ingestRouter = router({
     }),
 });
 
-// ─── App Router ───────────────────────────────────────────────────────────────
+// --- Focus Topics Router ----------------------------------------------------
+const focusTopicsRouter = router({
+  // List all 3 focus topic clusters with article counts
+  list: publicProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const topics = await db.select().from(focusTopics).orderBy(focusTopics.dayNumber);
+    // Get counts for each topic
+    const results = await Promise.all(topics.map(async (topic) => {
+      const rows = await db
+        .select({ count: articleFocusTopics.id })
+        .from(articleFocusTopics)
+        .where(and(eq(articleFocusTopics.focusTopicId, topic.id), gte(articleFocusTopics.relevanceScore, 50)));
+      return { ...topic, articleCount: rows.length };
+    }));
+    return results;
+  }),
 
+  // Get articles for a specific focus topic, sorted by relevance
+  getArticles: publicProcedure
+    .input(z.object({
+      topicId: z.number(),
+      minScore: z.number().min(0).max(100).default(50),
+      limit: z.number().min(1).max(200).default(100),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select({
+          id: articles.id,
+          title: articles.title,
+          source: articles.source,
+          author: articles.author,
+          summary: articles.summary,
+          importedAt: articles.importedAt,
+          isFavourite: articles.isFavourite,
+          relevanceScore: articleFocusTopics.relevanceScore,
+          aiReason: articleFocusTopics.aiReason,
+        })
+        .from(articleFocusTopics)
+        .innerJoin(articles, eq(articleFocusTopics.articleId, articles.id))
+        .where(and(
+          eq(articleFocusTopics.focusTopicId, input.topicId),
+          gte(articleFocusTopics.relevanceScore, input.minScore)
+        ))
+        .orderBy(desc(articleFocusTopics.relevanceScore))
+        .limit(input.limit);
+      return rows;
+    }),
+
+  // Get tagging progress stats
+  getTaggingStats: publicProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { tagged: 0, total: 0, percent: 0 };
+    const [totalRows] = await db.select({ total: count(articles.id) }).from(articles);
+    const taggedRows = await db
+      .selectDistinct({ articleId: articleFocusTopics.articleId })
+      .from(articleFocusTopics);
+    const total = totalRows?.total ? Number(totalRows.total) : 0;
+    const tagged = taggedRows.length;
+    return { tagged, total, percent: total > 0 ? Math.round((tagged / total) * 100) : 0 };
+  }),
+});
+
+// --- App Router ---------------------------------------------------------------
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -789,6 +856,7 @@ export const appRouter = router({
   calendar: calendarRouter,
   inbox: inboxRouter,
   ingest: ingestRouter,
+  focusTopics: focusTopicsRouter,
 });
 
 export type AppRouter = typeof appRouter;

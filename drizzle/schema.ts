@@ -26,7 +26,7 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// ─── Content Articles ────────────────────────────────────────────────────────
+// --- Content Articles --------------------------------------------------------
 
 export const articles = mysqlTable("articles", {
   id: int("id").autoincrement().primaryKey(),
@@ -50,7 +50,7 @@ export const articles = mysqlTable("articles", {
 export type Article = typeof articles.$inferSelect;
 export type InsertArticle = typeof articles.$inferInsert;
 
-// ─── Tags ────────────────────────────────────────────────────────────────────
+// --- Tags --------------------------------------------------------------------
 
 export const tags = mysqlTable("tags", {
   id: int("id").autoincrement().primaryKey(),
@@ -62,7 +62,7 @@ export const tags = mysqlTable("tags", {
 export type Tag = typeof tags.$inferSelect;
 export type InsertTag = typeof tags.$inferInsert;
 
-// ─── Article ↔ Tag join ──────────────────────────────────────────────────────
+// --- Article ↔ Tag join ------------------------------------------------------
 
 export const articleTags = mysqlTable("article_tags", {
   id: int("id").autoincrement().primaryKey(),
@@ -85,7 +85,7 @@ export const articleTags = mysqlTable("article_tags", {
 
 export type ArticleTag = typeof articleTags.$inferSelect;
 
-// ─── Generated Content Drafts ────────────────────────────────────────────────
+// --- Generated Content Drafts ------------------------------------------------
 
 export const generatedDrafts = mysqlTable("generated_drafts", {
   id: int("id").autoincrement().primaryKey(),
@@ -113,7 +113,7 @@ export const generatedDrafts = mysqlTable("generated_drafts", {
 export type GeneratedDraft = typeof generatedDrafts.$inferSelect;
 export type InsertGeneratedDraft = typeof generatedDrafts.$inferInsert;
 
-// ─── Content Repurposing Status ─────────────────────────────────────────────
+// --- Content Repurposing Status ---------------------------------------------
 
 export const contentRepurposing = mysqlTable(
   "content_repurposing",
@@ -156,7 +156,7 @@ export const contentRepurposing = mysqlTable(
 export type ContentRepurposing = typeof contentRepurposing.$inferSelect;
 export type InsertContentRepurposing = typeof contentRepurposing.$inferInsert;
 
-// ─── Raw Email Inbox ─────────────────────────────────────────────────────────
+// --- Raw Email Inbox ---------------------------------------------------------
 // Every email forwarded to monkhouse-newsletter@manus.bot lands here first.
 // status: 'pending' = awaiting review, 'approved' = ingested as article,
 //         'discarded' = not useful content, 'error' = ingestion failed
@@ -190,7 +190,7 @@ export const rawEmails = mysqlTable("raw_emails", {
 export type RawEmail = typeof rawEmails.$inferSelect;
 export type InsertRawEmail = typeof rawEmails.$inferInsert;
 
-// ─── Newsletter Sources ───────────────────────────────────────────────────────
+// --- Newsletter Sources -------------------------------------------------------
 // Tracks which email senders to monitor for newsletter ingestion
 
 export const newsletterSources = mysqlTable("newsletter_sources", {
@@ -206,7 +206,7 @@ export const newsletterSources = mysqlTable("newsletter_sources", {
 export type NewsletterSource = typeof newsletterSources.$inferSelect;
 export type InsertNewsletterSource = typeof newsletterSources.$inferInsert;
 
-// ─── Ingest Log ───────────────────────────────────────────────────────────────
+// --- Ingest Log ---------------------------------------------------------------
 // Records each scheduled ingest run
 
 export const ingestLog = mysqlTable("ingest_log", {
@@ -222,3 +222,41 @@ export const ingestLog = mysqlTable("ingest_log", {
 
 export type IngestLog = typeof ingestLog.$inferSelect;
 export type InsertIngestLog = typeof ingestLog.$inferInsert;
+
+// --- Focus Topics ------------------------------------------------------------
+// The 3 content clusters Dom rotates through on LinkedIn (Day 1 / Day 2 / Day 3)
+export const focusTopics = mysqlTable("focus_topics", {
+  id: int("id").autoincrement().primaryKey(),
+  dayNumber: int("dayNumber").notNull(), // 1, 2, or 3
+  name: varchar("name", { length: 256 }).notNull(),
+  description: text("description"),
+  keywords: text("keywords"), // JSON array of keyword strings for AI matching
+  color: varchar("color", { length: 32 }), // UI accent colour e.g. "#00b4ff"
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type FocusTopic = typeof focusTopics.$inferSelect;
+export type InsertFocusTopic = typeof focusTopics.$inferInsert;
+
+// Junction table: which articles map to which focus topics (many-to-many)
+export const articleFocusTopics = mysqlTable("article_focus_topics", {
+  id: int("id").autoincrement().primaryKey(),
+  articleId: int("articleId").notNull(),
+  focusTopicId: int("focusTopicId").notNull(),
+  relevanceScore: int("relevanceScore").default(0).notNull(), // 0-100
+  aiReason: text("aiReason"), // brief explanation from the LLM
+  taggedAt: timestamp("taggedAt").defaultNow().notNull(),
+}, (table) => ({
+  articleFocusTopicUnique: unique("article_focus_topic_unique").on(table.articleId, table.focusTopicId),
+  articleFk: foreignKey({
+    columns: [table.articleId],
+    foreignColumns: [articles.id],
+    name: "aft_article_id_fk",
+  }).onDelete("cascade"),
+  focusTopicFk: foreignKey({
+    columns: [table.focusTopicId],
+    foreignColumns: [focusTopics.id],
+    name: "aft_focus_topic_id_fk",
+  }).onDelete("cascade"),
+}));
+export type ArticleFocusTopic = typeof articleFocusTopics.$inferSelect;
+export type InsertArticleFocusTopic = typeof articleFocusTopics.$inferInsert;

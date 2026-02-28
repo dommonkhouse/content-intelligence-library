@@ -36,7 +36,7 @@ export async function getDb() {
   return _db;
 }
 
-// ─── Users ────────────────────────────────────────────────────────────────────
+// --- Users --------------------------------------------------------------------
 
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required for upsert");
@@ -74,7 +74,7 @@ export async function getUserByOpenId(openId: string) {
   return result[0];
 }
 
-// ─── Tags ─────────────────────────────────────────────────────────────────────
+// --- Tags ---------------------------------------------------------------------
 
 export async function getAllTags(): Promise<Tag[]> {
   const db = await getDb();
@@ -99,7 +99,7 @@ export async function deleteTag(tagId: number): Promise<void> {
   await db.delete(tags).where(eq(tags.id, tagId));
 }
 
-// ─── Articles ─────────────────────────────────────────────────────────────────
+// --- Articles -----------------------------------------------------------------
 
 export type ArticleWithTags = Article & { tags: Tag[] };
 
@@ -252,7 +252,7 @@ export async function toggleFavourite(id: number): Promise<boolean> {
   return next;
 }
 
-// ─── Generated Drafts ─────────────────────────────────────────────────────────
+// --- Generated Drafts ---------------------------------------------------------
 
 export async function getDraftsByArticle(articleId: number) {
   const db = await getDb();
@@ -292,7 +292,7 @@ export async function deleteDraft(id: number): Promise<void> {
   await db.delete(generatedDrafts).where(eq(generatedDrafts.id, id));
 }
 
-// ─── Content Calendar / Repurposing Status ──────────────────────────────────────────────
+// --- Content Calendar / Repurposing Status ----------------------------------------------
 
 export type CalendarFormat = "video_script" | "linkedin_post" | "instagram_caption" | "blog_post";
 export type CalendarStatus = "untouched" | "in_progress" | "done";
@@ -445,7 +445,7 @@ export async function upsertRepurposingStatus(data: {
     .onDuplicateKeyUpdate({ set: { status: data.status, notes: data.notes } });
 }
 
-// ─── Raw Email Inbox ──────────────────────────────────────────────────────────
+// --- Raw Email Inbox ----------------------------------------------------------
 
 // rawEmails imported via schema below
 
@@ -514,7 +514,7 @@ export async function getRawEmailByGmailId(gmailMessageId: string): Promise<RawE
   return rows[0] ?? null;
 }
 
-// ─── Newsletter Sources ──────────────────────────────────────────────────────
+// --- Newsletter Sources ------------------------------------------------------
 
 export async function listNewsletterSources(): Promise<NewsletterSource[]> {
   const db = await getDb();
@@ -549,7 +549,7 @@ export async function deleteNewsletterSource(id: number): Promise<void> {
   await db.delete(newsletterSources).where(eq(newsletterSources.id, id));
 }
 
-// ─── Ingest Log ──────────────────────────────────────────────────────────────
+// --- Ingest Log --------------------------------------------------------------
 
 export async function listIngestLogs(limit = 20): Promise<IngestLog[]> {
   const db = await getDb();

@@ -10,6 +10,7 @@ import IdeaGenerator from "./pages/IdeaGenerator";
 import ContentCalendar from "./pages/ContentCalendar";
 import EmailInbox from "./pages/EmailInbox";
 import IngestSettings from "./pages/IngestSettings";
+import FocusTopics from "./pages/FocusTopics";
 import DashboardLayout from "./components/DashboardLayout";
 
 function Router() {
@@ -23,6 +24,7 @@ function Router() {
         <Route path={"/calendar"} component={ContentCalendar} />
         <Route path={"/inbox"} component={EmailInbox} />
         <Route path={"/ingest"} component={IngestSettings} />
+        <Route path={"/focus"} component={FocusTopics} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

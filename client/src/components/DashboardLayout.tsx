@@ -12,12 +12,13 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { BookOpen, CalendarDays, Lightbulb, Mail, PanelLeft, Settings2 } from "lucide-react";
+import { BookOpen, CalendarDays, Lightbulb, Mail, PanelLeft, Settings2, Target } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 
 const menuItems = [
   { icon: BookOpen, label: "Content Library", path: "/" },
+  { icon: Target, label: "Focus Topics", path: "/focus" },
   { icon: Lightbulb, label: "Idea Generator", path: "/ideas" },
   { icon: CalendarDays, label: "Content Calendar", path: "/calendar" },
   { icon: Mail, label: "Email Inbox", path: "/inbox" },
