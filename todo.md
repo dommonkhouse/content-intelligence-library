@@ -59,3 +59,7 @@
 - [x] Build Ingest Settings page: status cards, sources table, ingest history log, manual trigger
 - [x] Add Ingest Settings nav item to sidebar
 - [x] Bulk-ingest 180 historical newsletter emails from Gmail (194 found, 14 excluded as non-newsletter)
+
+## AI Enrichment Pipeline + Daily Scheduler
+- [x] Process 180 pending inbox emails through AI enrichment (extract article, auto-tag, save to library) — 75 saved, 94 discarded as promotional/sales
+- [x] Set up daily automatic Gmail ingest scheduler (runs every morning at 7am UK time)

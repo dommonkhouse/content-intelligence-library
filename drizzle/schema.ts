@@ -1,4 +1,6 @@
 import {
+  foreignKey,
+  index,
   int,
   unique,
   mysqlEnum,
@@ -40,7 +42,10 @@ export const articles = mysqlTable("articles", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   isFavourite: boolean("isFavourite").default(false).notNull(),
   wordCount: int("wordCount").default(0),
-});
+}, (table) => ({
+  importedAtIdx: index("articles_imported_at_idx").on(table.importedAt),
+  sourceIdx: index("articles_source_idx").on(table.source),
+}));
 
 export type Article = typeof articles.$inferSelect;
 export type InsertArticle = typeof articles.$inferInsert;
@@ -63,7 +68,20 @@ export const articleTags = mysqlTable("article_tags", {
   id: int("id").autoincrement().primaryKey(),
   articleId: int("articleId").notNull(),
   tagId: int("tagId").notNull(),
-});
+}, (table) => ({
+  articleIdIdx: index("article_tags_article_id_idx").on(table.articleId),
+  tagIdIdx: index("article_tags_tag_id_idx").on(table.tagId),
+  articleFk: foreignKey({
+    columns: [table.articleId],
+    foreignColumns: [articles.id],
+    name: "article_tags_article_id_fk",
+  }).onDelete("cascade"),
+  tagFk: foreignKey({
+    columns: [table.tagId],
+    foreignColumns: [tags.id],
+    name: "article_tags_tag_id_fk",
+  }).onDelete("cascade"),
+}));
 
 export type ArticleTag = typeof articleTags.$inferSelect;
 
@@ -82,7 +100,15 @@ export const generatedDrafts = mysqlTable("generated_drafts", {
   content: text("content").notNull(),
   angle: varchar("angle", { length: 512 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (table) => ({
+  articleCreatedAtIdx: index("generated_drafts_article_created_at_idx").on(table.articleId, table.createdAt),
+  articleFormatIdx: index("generated_drafts_article_format_idx").on(table.articleId, table.format),
+  articleFk: foreignKey({
+    columns: [table.articleId],
+    foreignColumns: [articles.id],
+    name: "generated_drafts_article_id_fk",
+  }).onDelete("cascade"),
+}));
 
 export type GeneratedDraft = typeof generatedDrafts.$inferSelect;
 export type InsertGeneratedDraft = typeof generatedDrafts.$inferInsert;
@@ -112,6 +138,18 @@ export const contentRepurposing = mysqlTable(
       table.articleId,
       table.format
     ),
+    articleStatusIdx: index("content_repurposing_article_status_idx").on(table.articleId, table.status),
+    articleUpdatedAtIdx: index("content_repurposing_article_updated_at_idx").on(table.articleId, table.updatedAt),
+    articleFk: foreignKey({
+      columns: [table.articleId],
+      foreignColumns: [articles.id],
+      name: "content_repurposing_article_id_fk",
+    }).onDelete("cascade"),
+    draftFk: foreignKey({
+      columns: [table.draftId],
+      foreignColumns: [generatedDrafts.id],
+      name: "content_repurposing_draft_id_fk",
+    }).onDelete("set null"),
   })
 );
 
@@ -139,7 +177,15 @@ export const rawEmails = mysqlTable("raw_emails", {
   articleId: int("articleId"), // set when approved and converted to article
   receivedAt: timestamp("receivedAt").defaultNow().notNull(),
   processedAt: timestamp("processedAt"),
-});
+}, (table) => ({
+  statusReceivedAtIdx: index("raw_emails_status_received_at_idx").on(table.status, table.receivedAt),
+  articleIdIdx: index("raw_emails_article_id_idx").on(table.articleId),
+  articleFk: foreignKey({
+    columns: [table.articleId],
+    foreignColumns: [articles.id],
+    name: "raw_emails_article_id_fk",
+  }).onDelete("set null"),
+}));
 
 export type RawEmail = typeof rawEmails.$inferSelect;
 export type InsertRawEmail = typeof rawEmails.$inferInsert;

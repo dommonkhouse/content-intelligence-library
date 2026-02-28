@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -195,6 +196,9 @@ function ImportModal({ tags, onSuccess }: { tags: Tag[]; onSuccess: () => void }
       <DialogContent className="max-w-lg bg-card border-border">
         <DialogHeader>
           <DialogTitle className="text-foreground">Import Content</DialogTitle>
+          <DialogDescription>
+            Import from a URL or paste newsletter text to extract articles.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex gap-2 mb-4">
@@ -315,6 +319,9 @@ function ManageTagsModal({ tags, onSuccess }: { tags: Tag[]; onSuccess: () => vo
       <DialogContent className="max-w-md bg-card border-border">
         <DialogHeader>
           <DialogTitle className="text-foreground">Manage Tags</DialogTitle>
+          <DialogDescription>
+            Create and delete tags used for organizing imported content.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="flex gap-2">

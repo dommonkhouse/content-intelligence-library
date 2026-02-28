@@ -4,7 +4,13 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { CheckCircle, XCircle, Clock, Mail, ExternalLink, AlertCircle, ChevronRight } from "lucide-react";
@@ -133,10 +139,10 @@ function EmailDetailModal({
           <DialogTitle className="text-base font-semibold pr-8 leading-snug">
             {email.subject ?? "(no subject)"}
           </DialogTitle>
-          <p className="text-xs text-gray-500 mt-1">
+          <DialogDescription className="text-xs text-gray-500 mt-1">
             From: {email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress} ·{" "}
             {new Date(email.receivedAt).toLocaleString("en-GB")}
-          </p>
+          </DialogDescription>
         </DialogHeader>
 
         {/* Verification email alert */}

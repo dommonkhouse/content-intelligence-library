@@ -33,6 +33,27 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 
+const rateLimitBuckets = new Map<string, number[]>();
+
+function enforceRateLimit(params: {
+  key: string;
+  maxRequests: number;
+  windowMs: number;
+}) {
+  const now = Date.now();
+  const cutoff = now - params.windowMs;
+  const existing = rateLimitBuckets.get(params.key) ?? [];
+  const recent = existing.filter((timestamp) => timestamp > cutoff);
+  if (recent.length >= params.maxRequests) {
+    throw new TRPCError({
+      code: "TOO_MANY_REQUESTS",
+      message: "Rate limit exceeded. Please wait and try again.",
+    });
+  }
+  recent.push(now);
+  rateLimitBuckets.set(params.key, recent);
+}
+
 // ─── Tags Router ──────────────────────────────────────────────────────────────
 
 const tagsRouter = router({
@@ -127,7 +148,13 @@ const articlesRouter = router({
   // ── URL Import ──────────────────────────────────────────────────────────────
   importFromUrl: protectedProcedure
     .input(z.object({ url: z.string().url(), tagIds: z.array(z.number()).default([]) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      enforceRateLimit({
+        key: `importFromUrl:${ctx.user.id}`,
+        maxRequests: 10,
+        windowMs: 60_000,
+      });
+
       // Use LLM to extract article metadata from the URL content
       const extractionPrompt = `You are a content extraction assistant. Given the URL below, extract the article information and return a JSON object with these exact fields:
 - title: string (article title)
@@ -213,7 +240,13 @@ Return ONLY valid JSON, no markdown fences.`;
         defaultTagIds: z.array(z.number()).default([]),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      enforceRateLimit({
+        key: `importFromText:${ctx.user.id}`,
+        maxRequests: 5,
+        windowMs: 60_000,
+      });
+
       const extractionPrompt = `You are a content extraction assistant. The following is raw text from a newsletter email. Extract ALL distinct articles/posts mentioned in it. For each article return:
 - title: string
 - url: string (the article URL if present, otherwise empty string)
@@ -328,7 +361,13 @@ const draftsRouter = router({
         customAngle: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      enforceRateLimit({
+        key: `drafts.generate:${ctx.user.id}`,
+        maxRequests: 20,
+        windowMs: 60_000,
+      });
+
       const article = await getArticleById(input.articleId);
       if (!article) throw new TRPCError({ code: "NOT_FOUND" });
 
@@ -405,7 +444,14 @@ Return a JSON object with:
 // ─── Calendar Router ─────────────────────────────────────────────────────────
 
 const calendarRouter = router({
-  getData: publicProcedure.query(() => getCalendarData()),
+  getData: publicProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(500).default(200),
+        offset: z.number().min(0).default(0),
+      })
+    )
+    .query(({ input }) => getCalendarData(input)),
 
   updateStatus: protectedProcedure
     .input(
@@ -455,6 +501,130 @@ const inboxRouter = router({
         articleId: input.articleId,
       })
     ),
+
+  // Bulk auto-process all pending emails using LLM extraction
+  bulkProcess: publicProcedure
+    .input(
+      z.object({
+        batchSize: z.number().min(1).max(20).default(10),
+        maxEmails: z.number().min(1).max(200).default(180),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { emails: pending } = await listRawEmails({ status: "pending", limit: input.maxEmails });
+      if (!pending.length) return { processed: 0, saved: 0, discarded: 0, errors: 0 };
+
+      // Get all existing tags for auto-assignment
+      const allTags = await getAllTags();
+      const tagNameMap = new Map(allTags.map((t) => [t.name.toLowerCase(), t.id]));
+
+      let saved = 0;
+      let discarded = 0;
+      let errors = 0;
+
+      // Process in batches to avoid overwhelming the LLM
+      for (let i = 0; i < pending.length; i += input.batchSize) {
+        const batch = pending.slice(i, i + input.batchSize);
+
+        await Promise.all(
+          batch.map(async (email) => {
+            try {
+              const extractionPrompt = `You are a content extraction assistant. The following is raw text from a newsletter email. Extract the main article or content and return structured JSON.
+
+EMAIL SUBJECT: ${email.subject ?? ""}
+FROM: ${email.fromName ?? ""} <${email.fromAddress ?? ""}>
+
+RAW TEXT:
+${(email.rawText ?? "").slice(0, 8000)}
+
+Return a JSON object with:
+- title: string (article/post title)
+- source: string (publication or sender name)
+- author: string (author name or empty string)
+- summary: string (2-3 sentence summary)
+- keyInsights: array of 3-5 strings (key takeaways)
+- fullText: string (main content, cleaned)
+- publicationDate: string (ISO date or empty string)
+- isArticle: boolean (true if this is substantive content worth keeping, false if it is a sales email, booking request, event invite, or promotional content with no educational value)
+- nonArticleReason: string (if isArticle is false, briefly explain why)
+- suggestedTags: array of strings (pick from: Leadership, Strategy, Growth, Hiring & Talent, Team Culture, Performance, Productivity, Coaching, B2B SaaS, AI, AI & Technology, AI Agents, Startups, Scaling & Growth, Founder CEO, Meetings, Remote Work, Sales, Innovation, IPOs)`;
+
+              const response = await invokeLLM({
+                messages: [
+                  { role: "system", content: "You extract article content from emails and return structured JSON." },
+                  { role: "user", content: extractionPrompt },
+                ],
+                response_format: {
+                  type: "json_schema",
+                  json_schema: {
+                    name: "email_extraction",
+                    strict: true,
+                    schema: {
+                      type: "object",
+                      properties: {
+                        title: { type: "string" },
+                        source: { type: "string" },
+                        author: { type: "string" },
+                        summary: { type: "string" },
+                        keyInsights: { type: "array", items: { type: "string" } },
+                        fullText: { type: "string" },
+                        publicationDate: { type: "string" },
+                        isArticle: { type: "boolean" },
+                        nonArticleReason: { type: "string" },
+                        suggestedTags: { type: "array", items: { type: "string" } },
+                      },
+                      required: ["title", "source", "author", "summary", "keyInsights", "fullText", "publicationDate", "isArticle", "nonArticleReason", "suggestedTags"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+              });
+
+              const content = response.choices[0]?.message?.content ?? "{}";
+              const extracted = JSON.parse(typeof content === "string" ? content : JSON.stringify(content));
+
+              if (!extracted.isArticle) {
+                await updateRawEmailStatus(email.id, "discarded", { errorMessage: extracted.nonArticleReason });
+                discarded++;
+                return;
+              }
+
+              // Map suggested tags to existing tag IDs
+              const tagIds: number[] = [];
+              for (const tagName of (extracted.suggestedTags ?? [])) {
+                const tagId = tagNameMap.get(tagName.toLowerCase());
+                if (tagId) tagIds.push(tagId);
+              }
+
+              const pubDate = extracted.publicationDate ? new Date(extracted.publicationDate) : undefined;
+              const wordCount = extracted.fullText ? extracted.fullText.split(/\s+/).length : 0;
+
+              const article = await createArticle(
+                {
+                  title: extracted.title || email.subject || "Untitled",
+                  source: extracted.source || email.fromName || email.fromAddress || "",
+                  author: extracted.author,
+                  fullText: extracted.fullText,
+                  summary: extracted.summary,
+                  keyInsights: JSON.stringify(extracted.keyInsights),
+                  publicationDate: pubDate,
+                  wordCount,
+                },
+                tagIds
+              );
+
+              await updateRawEmailStatus(email.id, "approved", { articleId: article.id });
+              saved++;
+            } catch (err) {
+              await updateRawEmailStatus(email.id, "error", { errorMessage: String(err).slice(0, 500) });
+              errors++;
+            }
+          })
+        );
+      }
+
+      return { processed: pending.length, saved, discarded, errors };
+    }),
 
   // Convert a raw email to an article in the library
   approve: publicProcedure

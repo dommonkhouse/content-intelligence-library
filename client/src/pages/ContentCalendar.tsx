@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -14,8 +13,6 @@ import {
   CheckCircle2,
   Clock,
   Circle,
-  ExternalLink,
-  BarChart3,
 } from "lucide-react";
 
 type CalendarFormat = "video_script" | "linkedin_post" | "instagram_caption" | "blog_post";
@@ -29,6 +26,7 @@ const FORMAT_CONFIG: Record<CalendarFormat, { label: string; icon: React.Element
 };
 
 const FORMATS = Object.keys(FORMAT_CONFIG) as CalendarFormat[];
+const PAGE_SIZE = 200;
 
 const STATUS_CONFIG: Record<CalendarStatus, { label: string; icon: React.ElementType; bg: string; text: string; border: string }> = {
   untouched: { label: "Untouched", icon: Circle, bg: "bg-gray-50", text: "text-gray-400", border: "border-gray-200" },
@@ -51,7 +49,6 @@ function StatusCell({
 }) {
   const cfg = STATUS_CONFIG[status];
   const StatusIcon = cfg.icon;
-  const FormatIcon = FORMAT_CONFIG[format].icon;
 
   const nextStatus: Record<CalendarStatus, CalendarStatus> = {
     untouched: "in_progress",
@@ -78,11 +75,53 @@ function StatusCell({
 export default function ContentCalendar() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<CalendarStatus | "all">("all");
+  const [page, setPage] = useState(0);
 
-  const { data: calendarData = [], isLoading, refetch } = trpc.calendar.getData.useQuery();
+  const utils = trpc.useUtils();
+  const queryInput = useMemo(
+    () => ({ limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
+    [page]
+  );
+  const { data, isLoading } = trpc.calendar.getData.useQuery(queryInput, {
+    placeholderData: (previousData) => previousData,
+  });
+  const calendarData = data?.items ?? [];
+  const totalItems = data?.total ?? 0;
+
   const updateStatus = trpc.calendar.updateStatus.useMutation({
-    onSuccess: () => refetch(),
-    onError: () => toast.error("Failed to update status"),
+    onMutate: async (variables) => {
+      await utils.calendar.getData.cancel(queryInput);
+      const previous = utils.calendar.getData.getData(queryInput);
+
+      utils.calendar.getData.setData(queryInput, (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          items: current.items.map((article) =>
+            article.id === variables.articleId
+              ? {
+                  ...article,
+                  statuses: {
+                    ...article.statuses,
+                    [variables.format]: variables.status,
+                  },
+                }
+              : article
+          ),
+        };
+      });
+
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        utils.calendar.getData.setData(queryInput, context.previous);
+      }
+      toast.error("Failed to update status");
+    },
+    onSettled: () => {
+      utils.calendar.getData.invalidate(queryInput);
+    },
   });
 
   const handleUpdate = (articleId: number, format: CalendarFormat, status: CalendarStatus) => {
@@ -113,6 +152,11 @@ export default function ContentCalendar() {
     }
     return { total, done, inProgress, untouched: total - done - inProgress };
   }, [calendarData]);
+  const donePercent = stats.total > 0 ? (stats.done / stats.total) * 100 : 0;
+  const donePercentLabel =
+    donePercent > 0 && donePercent < 1 ? "<1" : String(Math.round(donePercent));
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  const currentPage = page + 1;
 
   return (
     <div className="p-6 max-w-full">
@@ -120,7 +164,7 @@ export default function ContentCalendar() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Content calendar</h1>
         <p className="text-sm text-gray-500 mt-1">
-          {calendarData.length} articles · track repurposing across all formats
+          {totalItems} articles · track repurposing across all formats
         </p>
       </div>
 
@@ -254,12 +298,39 @@ export default function ContentCalendar() {
         </div>
       )}
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between">
+          <p className="text-xs text-gray-500">
+            Page {currentPage} of {totalPages}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page === 0}
+              onClick={() => setPage((prev) => Math.max(0, prev - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={currentPage >= totalPages}
+              onClick={() => setPage((prev) => Math.min(totalPages - 1, prev + 1))}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Progress bar */}
       {stats.total > 0 && (
         <div className="mt-6">
           <div className="flex justify-between text-xs text-gray-500 mb-1.5">
             <span>Overall repurposing progress</span>
-            <span>{Math.round((stats.done / stats.total) * 100)}% complete</span>
+            <span>{donePercentLabel}% complete</span>
           </div>
           <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
             <div className="h-full flex">

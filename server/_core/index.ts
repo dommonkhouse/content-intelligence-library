@@ -38,36 +38,46 @@ async function startServer() {
   // when sameSite:'none' is also set, creating an infinite sign-in loop.
   app.set("trust proxy", 1);
 
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // Parse cookies so req.cookies is populated for session authentication
   app.use(cookieParser());
-
-  // OAuth callback under /api/oauth/callback
-  registerOAuthRoutes(app);
 
   // ── Email Ingest Webhook ─────────────────────────────────────────────────────
   // Receives forwarded emails from monkhouse-newsletter@manus.bot
   // Accepts both JSON (from Manus task system) and plain text POST bodies
-  app.post("/api/ingest/email", async (req, res) => {
-    try {
-      const body = req.body;
-      const subject = body.subject ?? body.Subject ?? "(no subject)";
-      const fromAddress = body.from ?? body.From ?? body.sender ?? "";
-      const fromName = body.fromName ?? body.from_name ?? "";
-      const rawText = body.text ?? body.body ?? body.rawText ?? body.content ?? JSON.stringify(body);
-      const rawHtml = body.html ?? body.rawHtml ?? null;
+  app.post(
+    "/api/ingest/email",
+    express.json({ limit: "10mb" }),
+    express.urlencoded({ limit: "10mb", extended: true }),
+    express.text({ type: ["text/plain", "text/html"], limit: "10mb" }),
+    async (req, res) => {
+      try {
+        const body =
+          typeof req.body === "string"
+            ? { rawText: req.body, text: req.body }
+            : req.body ?? {};
+        const subject = body.subject ?? body.Subject ?? "(no subject)";
+        const fromAddress = body.from ?? body.From ?? body.sender ?? "";
+        const fromName = body.fromName ?? body.from_name ?? "";
+        const rawText = body.text ?? body.body ?? body.rawText ?? body.content ?? JSON.stringify(body);
+        const rawHtml = body.html ?? body.rawHtml ?? null;
 
-      const { insertRawEmail: insertFn } = await import("../db.js");
-      const email = await insertFn({ subject, fromAddress, fromName, rawText, rawHtml });
+        const { insertRawEmail: insertFn } = await import("../db.js");
+        const email = await insertFn({ subject, fromAddress, fromName, rawText, rawHtml });
 
-      res.json({ success: true, id: email.id });
-    } catch (err) {
-      console.error("[Email Ingest] Error:", err);
-      res.status(500).json({ success: false, error: String(err) });
+        res.json({ success: true, id: email.id });
+      } catch (err) {
+        console.error("[Email Ingest] Error:", err);
+        res.status(500).json({ success: false, error: String(err) });
+      }
     }
-  });
+  );
+
+  // Keep global parser limits tight; large payloads must use route-specific parsers.
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ limit: "256kb", extended: true }));
+
+  // OAuth callback under /api/oauth/callback
+  registerOAuthRoutes(app);
 
   // tRPC API
   app.use(

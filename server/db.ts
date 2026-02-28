@@ -318,6 +318,7 @@ type CalendarStatusRow = {
 type CalendarDraftRow = {
   articleId: number;
   format: "video_script" | "linkedin_post" | "instagram_caption" | "blog_post" | "blog_outline";
+  draftCount?: number;
 };
 
 function normalizeFormat(
@@ -347,7 +348,8 @@ export function deriveCalendarData(
   const draftCountMap = new Map<string, number>();
   for (const d of drafts) {
     const key = `${d.articleId}:${normalizeFormat(d.format)}`;
-    draftCountMap.set(key, (draftCountMap.get(key) ?? 0) + 1);
+    const increment = d.draftCount ?? 1;
+    draftCountMap.set(key, (draftCountMap.get(key) ?? 0) + increment);
   }
 
   return allArticles.map((a) => {
@@ -364,17 +366,37 @@ export function deriveCalendarData(
   });
 }
 
-export async function getCalendarData(): Promise<CalendarArticle[]> {
+export async function getCalendarData(opts?: {
+  limit?: number;
+  offset?: number;
+}): Promise<{ items: CalendarArticle[]; total: number }> {
   const db = await getDb();
-  if (!db) return [];
+  if (!db) return { items: [], total: 0 };
 
-  // Get all articles (id, title, source, importedAt)
-  const allArticles = await db
-    .select({ id: articles.id, title: articles.title, source: articles.source, importedAt: articles.importedAt })
-    .from(articles)
-    .orderBy(desc(articles.importedAt));
+  const limit = Math.min(Math.max(opts?.limit ?? 200, 1), 500);
+  const offset = Math.max(opts?.offset ?? 0, 0);
 
-  // Get all repurposing statuses
+  const [countRows, allArticles] = await Promise.all([
+    db.select({ count: count() }).from(articles),
+    db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        source: articles.source,
+        importedAt: articles.importedAt,
+      })
+      .from(articles)
+      .orderBy(desc(articles.importedAt))
+      .limit(limit)
+      .offset(offset),
+  ]);
+
+  if (allArticles.length === 0) {
+    return { items: [], total: countRows[0]?.count ?? 0 };
+  }
+
+  const articleIds = allArticles.map((article) => article.id);
+
   const statuses = await db
     .select({
       articleId: contentRepurposing.articleId,
@@ -382,14 +404,31 @@ export async function getCalendarData(): Promise<CalendarArticle[]> {
       status: contentRepurposing.status,
       updatedAt: contentRepurposing.updatedAt,
     })
-    .from(contentRepurposing);
+    .from(contentRepurposing)
+    .where(inArray(contentRepurposing.articleId, articleIds));
 
-  // Get draft counts per article per format
   const drafts = await db
-    .select({ articleId: generatedDrafts.articleId, format: generatedDrafts.format })
-    .from(generatedDrafts);
+    .select({
+      articleId: generatedDrafts.articleId,
+      format: generatedDrafts.format,
+      draftCount: sql<number>`count(*)`,
+    })
+    .from(generatedDrafts)
+    .where(inArray(generatedDrafts.articleId, articleIds))
+    .groupBy(generatedDrafts.articleId, generatedDrafts.format);
 
-  return deriveCalendarData(allArticles, statuses, drafts as CalendarDraftRow[]);
+  return {
+    items: deriveCalendarData(
+      allArticles,
+      statuses,
+      drafts.map((d) => ({
+        articleId: d.articleId,
+        format: d.format,
+        draftCount: Number(d.draftCount ?? 0),
+      }))
+    ),
+    total: countRows[0]?.count ?? 0,
+  };
 }
 
 export async function upsertRepurposingStatus(data: {
