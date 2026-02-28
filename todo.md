@@ -34,3 +34,19 @@
 - [x] Track status per format: Video Script, LinkedIn, Instagram, Blog Post
 - [x] Add route and sidebar nav link for Content Calendar
 - [x] Push to GitHub after completion
+
+## Email Ingest Pipeline
+- [ ] Build email ingest webhook endpoint in the app (POST /api/ingest/email)
+- [ ] Generate a secret token to secure the ingest endpoint
+- [ ] Update Alan Whitman Gmail filter: remove "Alan" label, add forward to ingest endpoint
+- [ ] Pull all existing Alan-tagged emails from Gmail and import into content library
+- [ ] Save checkpoint and push to GitHub
+
+## Email Inbox Intercept
+- [ ] Add raw_emails table to DB schema
+- [ ] Build /api/email-ingest webhook endpoint to receive forwarded emails
+- [ ] Build Email Inbox page showing raw captured emails with Approve/Discard actions
+- [ ] Auto-detect article vs non-article emails and route accordingly
+- [ ] Show clickable links in raw email view (for Gmail verification URL)
+- [ ] Add Inbox nav item to sidebar
+- [ ] Set up Alan Gmail filter to forward to monkhouse-newsletter@manus.bot

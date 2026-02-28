@@ -1,0 +1,2 @@
+ALTER TABLE `generated_drafts` MODIFY COLUMN `format` enum('video_script','linkedin_post','instagram_caption','blog_post') NOT NULL;--> statement-breakpoint
+ALTER TABLE `content_repurposing` ADD CONSTRAINT `content_repurposing_article_format_unique` UNIQUE(`articleId`,`format`);

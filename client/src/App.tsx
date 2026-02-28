@@ -8,6 +8,7 @@ import Library from "./pages/Library";
 import ArticleDetail from "./pages/ArticleDetail";
 import IdeaGenerator from "./pages/IdeaGenerator";
 import ContentCalendar from "./pages/ContentCalendar";
+import EmailInbox from "./pages/EmailInbox";
 import DashboardLayout from "./components/DashboardLayout";
 
 function Router() {
@@ -19,6 +20,7 @@ function Router() {
         <Route path={"/article/:id"} component={ArticleDetail} />
         <Route path={"/ideas"} component={IdeaGenerator} />
         <Route path={"/calendar"} component={ContentCalendar} />
+        <Route path={"/inbox"} component={EmailInbox} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

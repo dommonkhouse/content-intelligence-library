@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   Article,
@@ -11,8 +11,11 @@ import {
   articles,
   contentRepurposing,
   generatedDrafts,
+  rawEmails,
   tags,
   users,
+  type RawEmail,
+  type InsertRawEmail,
 } from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -397,4 +400,66 @@ export async function upsertRepurposingStatus(data: {
     .insert(contentRepurposing)
     .values({ articleId: data.articleId, format: data.format, status: data.status, notes: data.notes })
     .onDuplicateKeyUpdate({ set: { status: data.status, notes: data.notes } });
+}
+
+// ─── Raw Email Inbox ──────────────────────────────────────────────────────────
+
+// rawEmails imported via schema below
+
+export async function insertRawEmail(data: InsertRawEmail): Promise<RawEmail> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(rawEmails).values(data);
+  const id = (result[0] as { insertId: number }).insertId;
+  const rows = await db.select().from(rawEmails).where(eq(rawEmails.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function listRawEmails(opts: {
+  status?: "pending" | "approved" | "discarded" | "error";
+  limit?: number;
+  offset?: number;
+}): Promise<{ emails: RawEmail[]; total: number }> {
+  const db = await getDb();
+  if (!db) return { emails: [], total: 0 };
+
+  const conditions = [];
+  if (opts.status) conditions.push(eq(rawEmails.status, opts.status));
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [rows, countRows] = await Promise.all([
+    db.select().from(rawEmails)
+      .where(where)
+      .orderBy(desc(rawEmails.receivedAt))
+      .limit(opts.limit ?? 50)
+      .offset(opts.offset ?? 0),
+    db.select({ count: count() }).from(rawEmails).where(where),
+  ]);
+
+  return { emails: rows, total: countRows[0]?.count ?? 0 };
+}
+
+export async function updateRawEmailStatus(
+  id: number,
+  status: "pending" | "approved" | "discarded" | "error",
+  opts?: { errorMessage?: string; articleId?: number }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(rawEmails)
+    .set({
+      status,
+      processedAt: new Date(),
+      ...(opts?.errorMessage !== undefined ? { errorMessage: opts.errorMessage } : {}),
+      ...(opts?.articleId !== undefined ? { articleId: opts.articleId } : {}),
+    })
+    .where(eq(rawEmails.id, id));
+}
+
+export async function getRawEmailById(id: number): Promise<RawEmail | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(rawEmails).where(eq(rawEmails.id, id)).limit(1);
+  return rows[0] ?? null;
 }

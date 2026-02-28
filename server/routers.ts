@@ -16,6 +16,10 @@ import {
   upsertTag,
   getCalendarData,
   upsertRepurposingStatus,
+  insertRawEmail,
+  listRawEmails,
+  updateRawEmailStatus,
+  getRawEmailById,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -408,6 +412,146 @@ const calendarRouter = router({
     .mutation(({ input }) => upsertRepurposingStatus(input)),
 });
 
+// ─── Email Inbox Router ─────────────────────────────────────────────────────
+
+const inboxRouter = router({
+  list: publicProcedure
+    .input(
+      z.object({
+        status: z.enum(["pending", "approved", "discarded", "error"]).optional(),
+        limit: z.number().min(1).max(100).default(50),
+        offset: z.number().min(0).default(0),
+      })
+    )
+    .query(({ input }) => listRawEmails(input)),
+
+  get: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const email = await getRawEmailById(input.id);
+      if (!email) throw new TRPCError({ code: "NOT_FOUND" });
+      return email;
+    }),
+
+  updateStatus: publicProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        status: z.enum(["pending", "approved", "discarded", "error"]),
+        errorMessage: z.string().optional(),
+        articleId: z.number().optional(),
+      })
+    )
+    .mutation(({ input }) =>
+      updateRawEmailStatus(input.id, input.status, {
+        errorMessage: input.errorMessage,
+        articleId: input.articleId,
+      })
+    ),
+
+  // Convert a raw email to an article in the library
+  approve: publicProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        tagIds: z.array(z.number()).default([]),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const email = await getRawEmailById(input.id);
+      if (!email) throw new TRPCError({ code: "NOT_FOUND" });
+
+      // Use LLM to extract article content from the email
+      const extractionPrompt = `You are a content extraction assistant. The following is raw text from a forwarded email/newsletter. Extract the main article or content and return structured JSON.
+
+EMAIL SUBJECT: ${email.subject ?? ""}
+FROM: ${email.fromName ?? ""} <${email.fromAddress ?? ""}>
+
+RAW TEXT:
+${(email.rawText ?? "").slice(0, 8000)}
+
+Return a JSON object with:
+- title: string (article/post title)
+- source: string (publication or sender name)
+- author: string (author name or empty string)
+- summary: string (2-3 sentence summary)
+- keyInsights: array of 3-5 strings (key takeaways)
+- fullText: string (main content, cleaned)
+- publicationDate: string (ISO date or empty string)
+- isArticle: boolean (true if this is substantive content worth keeping, false if it's a sales email, booking request, etc.)
+- nonArticleReason: string (if isArticle is false, briefly explain why)`;
+
+      let extracted: {
+        title: string;
+        source: string;
+        author: string;
+        summary: string;
+        keyInsights: string[];
+        fullText: string;
+        publicationDate: string;
+        isArticle: boolean;
+        nonArticleReason: string;
+      };
+
+      try {
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: "You extract article content from emails and return structured JSON." },
+            { role: "user", content: extractionPrompt },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "email_extraction",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  source: { type: "string" },
+                  author: { type: "string" },
+                  summary: { type: "string" },
+                  keyInsights: { type: "array", items: { type: "string" } },
+                  fullText: { type: "string" },
+                  publicationDate: { type: "string" },
+                  isArticle: { type: "boolean" },
+                  nonArticleReason: { type: "string" },
+                },
+                required: ["title", "source", "author", "summary", "keyInsights", "fullText", "publicationDate", "isArticle", "nonArticleReason"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const content = response.choices[0]?.message?.content ?? "{}";
+        extracted = JSON.parse(typeof content === "string" ? content : JSON.stringify(content));
+      } catch {
+        await updateRawEmailStatus(input.id, "error", { errorMessage: "LLM extraction failed" });
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to extract content from email" });
+      }
+
+      const pubDate = extracted.publicationDate ? new Date(extracted.publicationDate) : undefined;
+      const wordCount = extracted.fullText ? extracted.fullText.split(/\s+/).length : 0;
+
+      const article = await createArticle(
+        {
+          title: extracted.title || email.subject || "Untitled",
+          source: extracted.source || email.fromName || email.fromAddress || "",
+          author: extracted.author,
+          fullText: extracted.fullText,
+          summary: extracted.summary,
+          keyInsights: JSON.stringify(extracted.keyInsights),
+          publicationDate: pubDate,
+          wordCount,
+        },
+        input.tagIds
+      );
+
+      await updateRawEmailStatus(input.id, "approved", { articleId: article.id });
+      return { article, isArticle: extracted.isArticle, nonArticleReason: extracted.nonArticleReason };
+    }),
+});
+
 // ─── App Router ───────────────────────────────────────────────────────────────
 
 export const appRouter = router({
@@ -424,6 +568,7 @@ export const appRouter = router({
   articles: articlesRouter,
   drafts: draftsRouter,
   calendar: calendarRouter,
+  inbox: inboxRouter,
 });
 
 export type AppRouter = typeof appRouter;

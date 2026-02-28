@@ -47,6 +47,28 @@ async function startServer() {
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 
+  // ── Email Ingest Webhook ─────────────────────────────────────────────────────
+  // Receives forwarded emails from monkhouse-newsletter@manus.bot
+  // Accepts both JSON (from Manus task system) and plain text POST bodies
+  app.post("/api/ingest/email", async (req, res) => {
+    try {
+      const body = req.body;
+      const subject = body.subject ?? body.Subject ?? "(no subject)";
+      const fromAddress = body.from ?? body.From ?? body.sender ?? "";
+      const fromName = body.fromName ?? body.from_name ?? "";
+      const rawText = body.text ?? body.body ?? body.rawText ?? body.content ?? JSON.stringify(body);
+      const rawHtml = body.html ?? body.rawHtml ?? null;
+
+      const { insertRawEmail: insertFn } = await import("../db.js");
+      const email = await insertFn({ subject, fromAddress, fromName, rawText, rawHtml });
+
+      res.json({ success: true, id: email.id });
+    } catch (err) {
+      console.error("[Email Ingest] Error:", err);
+      res.status(500).json({ success: false, error: String(err) });
+    }
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",

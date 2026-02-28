@@ -117,3 +117,27 @@ export const contentRepurposing = mysqlTable(
 
 export type ContentRepurposing = typeof contentRepurposing.$inferSelect;
 export type InsertContentRepurposing = typeof contentRepurposing.$inferInsert;
+
+// ─── Raw Email Inbox ─────────────────────────────────────────────────────────
+// Every email forwarded to monkhouse-newsletter@manus.bot lands here first.
+// status: 'pending' = awaiting review, 'approved' = ingested as article,
+//         'discarded' = not useful content, 'error' = ingestion failed
+
+export const rawEmails = mysqlTable("raw_emails", {
+  id: int("id").autoincrement().primaryKey(),
+  subject: varchar("subject", { length: 512 }),
+  fromAddress: varchar("fromAddress", { length: 320 }),
+  fromName: varchar("fromName", { length: 256 }),
+  rawText: text("rawText"),
+  rawHtml: text("rawHtml"),
+  status: mysqlEnum("status", ["pending", "approved", "discarded", "error"])
+    .default("pending")
+    .notNull(),
+  errorMessage: text("errorMessage"),
+  articleId: int("articleId"), // set when approved and converted to article
+  receivedAt: timestamp("receivedAt").defaultNow().notNull(),
+  processedAt: timestamp("processedAt"),
+});
+
+export type RawEmail = typeof rawEmails.$inferSelect;
+export type InsertRawEmail = typeof rawEmails.$inferInsert;
