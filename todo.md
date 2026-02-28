@@ -63,3 +63,8 @@
 ## AI Enrichment Pipeline + Daily Scheduler
 - [x] Process 180 pending inbox emails through AI enrichment (extract article, auto-tag, save to library) — 75 saved, 94 discarded as promotional/sales
 - [x] Set up daily automatic Gmail ingest scheduler (runs every morning at 7am UK time)
+
+## Ingest-Queue Gmail Label
+- [x] Create "ingest-queue" label in Gmail
+- [x] Update gmailIngest.ts to also search label:ingest-queue (in addition to sender-based search)
+- [ ] Remove the ingest-queue label from emails after successful processing (prevent re-ingestion) — NOTE: Gmail MCP has no label-removal tool; deduplication via gmailMessageId prevents re-ingestion instead

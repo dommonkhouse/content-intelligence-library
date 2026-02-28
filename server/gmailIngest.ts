@@ -132,13 +132,15 @@ export async function runGmailIngest(opts?: {
 
   const maxPerSource = opts?.maxPerSource ?? 50;
 
-  // Build Gmail search query: search for emails from any active source
+  // Build Gmail search query:
+  // 1. Emails from any active newsletter source
+  // 2. OR any email manually tagged with the "ingest-queue" label
   const fromQuery = sources.map((s) => `from:${s.emailAddress}`).join(" OR ");
   // Optionally restrict to emails after a certain date
   const afterClause = opts?.afterDate
     ? ` after:${Math.floor(opts.afterDate.getTime() / 1000)}`
     : "";
-  const query = `(${fromQuery})${afterClause}`;
+  const query = `((${fromQuery}) OR label:ingest-queue)${afterClause}`;
 
   let searchResult: GmailSearchResult;
   try {
